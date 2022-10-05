@@ -1,0 +1,29 @@
+[
+    {
+        "command": "ping",
+        "desc": "Bot responds with pong if alive"
+    },
+    {
+        "command": "mc",
+        "desc": "Command used to interact with the minecraft server currently bound to the bot",
+        "args": [
+            {
+                "arg": "start",
+                "desc": "Starts the minecraft server."
+            },
+            {
+                "arg": "stop",
+                "aliases": ["shutdown", "kill"],
+                "desc": "Shutsdown the minecraft server."
+            },
+            {
+                "arg": "status",
+                "desc": "Checks whether the minecraft server is Off, On, Starting up or Shutting down. If the server is on it will return a list of the player currently on the server."
+            },
+            {
+                "arg": "info",
+                "desc": "Returns all the information regarding the server including: Ip-address, Port, Name, Average boot time along with other miscellaneous information about the world such as difficulty."
+            }
+        ]
+    }
+]
