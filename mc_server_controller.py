@@ -15,7 +15,7 @@ import time
 import aiomcrcon
 from jproperties import Properties
 import discord
-
+import json
 
 class ServerState(Enum):
     ON = 1
@@ -31,16 +31,59 @@ class MC_Server_Controller:
         self.external_ipv4 = urllib.request.urlopen('https://v4.ident.me').read().decode('utf8')
         self.server_dir = str(server_dir)
         self.update_server_config()
-        self.prev_boot_time = 0
 
-    def update_server_config(self):
-        
+    def update_server_config(self):        
         server_configs = Properties()
         with open(f'{self.server_dir}\\server.properties', 'rb') as config_file:
             server_configs.load(config_file)
         
+        # get server name, ip, port for users
+        self.world_name = server_configs.get("level-name").data
+        self.server_port = server_configs.get("query.port").data
+        self.difficulty = server_configs.get("difficulty").data
+        self.hardcore = server_configs.get("hardcore").data
+        self.gamemode = server_configs.get("gamemode").data
+
+        self.boot_time_manager()
+
+        #get rcon details
         self.rcon_port = server_configs.get("rcon.port").data
         self.rcon_password = server_configs.get("rcon.password").data
+
+    def boot_time_manager(self, read=True, newVal=0):
+        if read:
+            try:
+                with open(f'{self.server_dir}\\MOB_boot_time.json', 'r') as file:
+                    print("existing file read")
+                    self.boot_times_data = json.load(file)
+                    print("existing file loaded")
+                    self.boot_times = self.boot_times_data['boot_times']
+                    print("existing file converted")
+                self.average_boot_time = int(sum(self.boot_times) / float(len(self.boot_times)))
+            except:
+                with open(f'{self.server_dir}\\MOB_boot_time.json', 'w+') as file:
+                    self.boot_times_data = {
+                        'boot_times': []
+                    }
+                    json.dump(self.boot_times_data, file)
+                    self.boot_times = self.boot_times_data['boot_times']
+                self.average_boot_time = 0
+            print(self.boot_times_data)
+            print(self.boot_times)
+
+        else:
+            print("updating boot times")
+            self.boot_times_data['boot_times'].append(newVal)
+            print("data appended", self.boot_times_data['boot_times'])
+            self.boot_times = self.boot_times_data['boot_times']
+            print("local array appended", self.boot_times)
+            try:
+                self.average_boot_time = int(sum(self.boot_times) / float(len(self.boot_times)))
+                print("new average", self.average_boot_time)
+            except:
+                print("can't divide?")
+            with open(f'{self.server_dir}\\MOB_boot_time.json', 'w') as file:
+                json.dump(self.boot_times_data, file)
 
     async def start(self, channel):
         try:
@@ -61,14 +104,14 @@ class MC_Server_Controller:
                 await self.client.connect(timeout=1)
                 print("Server on")
                 self.server_state = ServerState.ON
-                self.prev_boot_time = current_boot_time + 1
-                onlineMsg = "```\n {0}\nServer is now online\n```".format(progressBar(current_boot_time, self.prev_boot_time, complete=True))
+                onlineMsg = "```\n {0}\nServer is now online\n```".format(progressBar(current_boot_time, self.average_boot_time, complete=True))
+                self.boot_time_manager(read=False, newVal=current_boot_time+1)
                 await loadingMsg.edit(content=onlineMsg)
             except:
                 print("Server not on yet")
                 current_boot_time += 1
-                print(f"{current_boot_time}/{self.prev_boot_time}")
-                progressMsg = "```\n {0} \n```".format(progressBar(current_boot_time, self.prev_boot_time))
+                print(f"{current_boot_time}/{self.average_boot_time}")
+                progressMsg = "```\n {0} \n```".format(progressBar(current_boot_time, self.average_boot_time))
                 await loadingMsg.edit(content=progressMsg)
                 continue
 
@@ -79,7 +122,6 @@ class MC_Server_Controller:
         self.server_state = ServerState.STOPPING
         print("Stopping server")
         shutdownMsg = await channel.send("```\nServer shutting down\n```")
-
         try:
             await self.client.connect()
             await self.client.send_cmd("stop")
@@ -88,8 +130,45 @@ class MC_Server_Controller:
             await shutdownMsg.edit(content="```\nServer offline\n```")
         except:
             await shutdownMsg.edit(content="```\nSomething went wrong while attempting to shutdown, ask the server host to check their hosting machine.\n```")
+            
         return True
 
+    async def status(self, channel):
+        if self.server_state == ServerState.ON:
+            await self.client.connect()
+            cmdRes = await self.client.send_cmd("/list")
+            print(cmdRes)
+            await channel.send(f"```\n{cmdRes[0]}\n```")
+            return True
+        elif self.server_state == ServerState.STARTING:
+            await channel.send("```\nServer if currently booting up\n```")
+            return True
+        elif self.server_state == ServerState.STOPPING:
+            await channel.send("```\nServer if currently shutting down\n```")
+            return True
+        await channel.send("```\nServer if currently offline\n```")
+        return False
+
+    async def getInfo(self, channel):
+        if self.average_boot_time == 0:
+            displayed_boot_time = "N/A, MOB has never booted up this server."
+        elif self.average_boot_time < 60:
+            displayed_boot_time = f"{self.average_boot_time}s"
+        else:
+            displayed_boot_time =  f"{self.average_boot_time // 60}m {self.average_boot_time % 60}s"
+        messageContent = f"\n----- Server MOB Currently Controls -----\n\n + World name: {self.world_name}\n + IP Address and Port: {self.external_ipv4}:{self.server_port}\n\n + Gamemode: {self.gamemode}\n + Difficulty: {self.difficulty}\n + Hardcore: {self.hardcore}\n\n + Average startup time: {displayed_boot_time}\n"
+        await channel.send(f"```\n{messageContent}\n```")
+        return True
+
+
+    async def op(self, channel, target):
+        try:
+            await self.client.connect()
+            cmdRes = await self.client.send_cmd(f"/op {target}")
+            print(cmdRes)
+            await channel.send(f"```\n{cmdRes[0]}\n```")
+        except:
+            print(f"couldnt op {target}?")
 
 def progressBar(timeElapsed, averagePrevtime, complete=False):
     if not complete:

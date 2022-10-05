@@ -13,7 +13,6 @@
             },
             {
                 "arg": "stop",
-                "aliases": ["shutdown", "kill"],
                 "desc": "Shutsdown the minecraft server."
             },
             {
@@ -23,6 +22,10 @@
             {
                 "arg": "info",
                 "desc": "Returns all the information regarding the server including: Ip-address, Port, Name, Average boot time along with other miscellaneous information about the world such as difficulty."
+            },
+            {
+                "arg": "op [target]",
+                "desc": "Give OP privelages to the target using their ingame name"
             }
         ]
     }
