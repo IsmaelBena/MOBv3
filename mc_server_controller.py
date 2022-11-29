@@ -34,6 +34,7 @@ class MC_Server_Controller:
 
     def update_server_config(self):        
         server_configs = Properties()
+        print(self.server_dir)
         with open(f'{self.server_dir}\\server.properties', 'rb') as config_file:
             server_configs.load(config_file)
         
@@ -87,7 +88,7 @@ class MC_Server_Controller:
 
     async def start(self, channel):
         try:
-            p = Popen(['start', 'cmd', '/C', 'start.bat'], cwd=self.server_dir, shell=True)
+            p = Popen(['start', 'cmd', '/C', 'PowerShell', '-File', 'start.ps1'], cwd=self.server_dir, shell=True)
             self.server_state = ServerState.STARTING
             loadingMsg = await channel.send("```\nMinecraft server is booting up :)\n```")
             time.sleep(1)
@@ -122,15 +123,17 @@ class MC_Server_Controller:
         self.server_state = ServerState.STOPPING
         print("Stopping server")
         shutdownMsg = await channel.send("```\nServer shutting down\n```")
-        try:
-            await self.client.connect()
-            await self.client.send_cmd("stop")
-            await self.client.close()
-            self.server_state = ServerState.OFF
-            await shutdownMsg.edit(content="```\nServer offline\n```")
-        except:
-            await shutdownMsg.edit(content="```\nSomething went wrong while attempting to shutdown, ask the server host to check their hosting machine.\n```")
-            
+        while True:
+            try:
+                await self.client.connect()
+                await self.client.send_cmd("stop")
+                break
+            except:
+                await shutdownMsg.edit(content="```\nSomething went wrong while attempting to shutdown. Trying again in 5s. If this message is visible for more than 30s then ask the server host to check their hosting machine.\n```")
+                time.sleep(5)
+        await self.client.close()
+        self.server_state = ServerState.OFF
+        await shutdownMsg.edit(content="```\nServer offline\n```")            
         return True
 
     async def status(self, channel):
